@@ -1,0 +1,153 @@
+{% extends 'calendar_app/base.html' %}
+
+{% block title %}View Calendar - Read Only{% endblock %}
+
+{% block content %}
+<div class="main-container">
+    <div class="calendar-header">
+        <div>
+            <h1 class="mb-0"><i class="bi bi-eye"></i> View Calendar</h1>
+            <p class="text-muted mb-0">{{ month_name }} {{ current_year }}</p>
+        </div>
+        <div>
+            <a href="{% url 'home' %}" class="btn btn-outline-secondary btn-custom me-2">
+                <i class="bi bi-house"></i> Home
+            </a>
+            <span class="badge bg-info" style="font-size: 14px; padding: 10px 15px;">
+                <i class="bi bi-eye"></i> Read-Only Mode
+            </span>
+        </div>
+    </div>
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <a href="?year={% if current_month == 1 %}{{ current_year|add:'-1' }}{% else %}{{ current_year }}{% endif %}&month={% if current_month == 1 %}12{% else %}{{ current_month|add:'-1' }}{% endif %}" 
+           class="btn btn-outline-primary btn-custom">
+            <i class="bi bi-chevron-left"></i> Previous
+        </a>
+        <h3>{{ month_name }} {{ current_year }}</h3>
+        <a href="?year={% if current_month == 12 %}{{ current_year|add:'1' }}{% else %}{{ current_year }}{% endif %}&month={% if current_month == 12 %}1{% else %}{{ current_month|add:'1' }}{% endif %}" 
+           class="btn btn-outline-primary btn-custom">
+            Next <i class="bi bi-chevron-right"></i>
+        </a>
+    </div>
+    
+    <div class="calendar-grid" id="calendarGrid">
+        <div class="day-header">Sun</div>
+        <div class="day-header">Mon</div>
+        <div class="day-header">Tue</div>
+        <div class="day-header">Wed</div>
+        <div class="day-header">Thu</div>
+        <div class="day-header">Fri</div>
+        <div class="day-header">Sat</div>
+    </div>
+    
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-color" style="background: #dc3545;"></div>
+            <span>Public Holiday</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #0d6efd;"></div>
+            <span>Personal Holiday</span>
+        </div>
+        {% for category in categories %}
+        <div class="legend-item">
+            <div class="legend-color" style="background: {{ category.color }};"></div>
+            <span>{{ category.name }}</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Event Detail Modal (No Delete) -->
+<div class="modal fade" id="eventDetailModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="eventDetailTitle"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="eventDetailBody"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function loadCalendar() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const year = urlParams.get('year') || new Date().getFullYear();
+        const month = urlParams.get('month') || (new Date().getMonth() + 1);
+        
+        try {
+            const response = await fetch(`/api/events/?year=${year}&month=${month}`);
+            const events = await response.json();
+            renderCalendar(parseInt(year), parseInt(month), events);
+        } catch (error) {
+            console.error('Error loading calendar:', error);
+        }
+    }
+    
+    function renderCalendar(year, month, events) {
+        const grid = document.getElementById('calendarGrid');
+        const firstDay = new Date(year, month - 1, 1).getDay();
+        const daysInMonth = new Date(year, month, 0).getDate();
+        
+        const dayCells = grid.querySelectorAll('.day-cell');
+        dayCells.forEach(cell => cell.remove());
+        
+        for (let i = 0; i < firstDay; i++) {
+            const emptyCell = document.createElement('div');
+            emptyCell.className = 'day-cell';
+            grid.appendChild(emptyCell);
+        }
+        
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dayCell = document.createElement('div');
+            dayCell.className = 'day-cell';
+            
+            const dayNumber = document.createElement('div');
+            dayNumber.className = 'day-number';
+            dayNumber.textContent = day;
+            dayCell.appendChild(dayNumber);
+            
+            const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const dayEvents = events.filter(e => e.start <= dateStr && e.end >= dateStr);
+            
+            dayEvents.forEach(event => {
+                const eventDiv = document.createElement('div');
+                eventDiv.className = 'event-item';
+                eventDiv.textContent = event.title;
+                eventDiv.style.background = event.color;
+                eventDiv.onclick = () => showEventDetail(event);
+                dayCell.appendChild(eventDiv);
+            });
+            
+            grid.appendChild(dayCell);
+        }
+    }
+    
+    function showEventDetail(event) {
+        document.getElementById('eventDetailTitle').textContent = event.title;
+        
+        let detailHTML = `
+            <p><strong><i class="bi bi-card-text"></i> Description:</strong> ${event.description || 'No description'}</p>
+            <p><strong><i class="bi bi-calendar-range"></i> Date:</strong> ${event.start} to ${event.end}</p>
+            <p><strong><i class="bi bi-tag"></i> Type:</strong> ${event.type.replace('_', ' ').toUpperCase()}</p>
+        `;
+        
+        if (event.category) {
+            detailHTML += `<p><strong><i class="bi bi-bookmark"></i> Category:</strong> ${event.category}</p>`;
+        }
+        
+        document.getElementById('eventDetailBody').innerHTML = detailHTML;
+        new bootstrap.Modal(document.getElementById('eventDetailModal')).show();
+    }
+    
+    document.addEventListener('DOMContentLoaded', loadCalendar);
+</script>
+{% endblock %}
